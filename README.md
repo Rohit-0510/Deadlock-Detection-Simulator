@@ -1,2 +1,196 @@
 # Deadlock-Detection-Simulator
 The Deadlock Detection Simulator is an interactive web-based application designed to simulate deadlock  detection in operating systems. It allows users to enter processes, allocate resources dynamically, and  determine whether a system is in a deadlock state. The project is built using HTML, JavaScript, and  Bootstrap for a respsonsive interface
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Deadlock Detection Simulator</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      padding: 20px;
+    }
+    .matrix-input {
+      width: 60px;
+      text-align: center;
+    }
+    .dark-mode {
+      background-color: #121212;
+      color: white;
+    }
+  </style>
+</head>
+<body onload="loadFromStorage()">
+  <div class="container">
+    <h2>Deadlock Detection Simulator</h2>
+    <div class="mb-3">
+      <label for="processes" class="form-label">Number of Processes:</label>
+      <input type="number" class="form-control" id="processes" min="1">
+    </div>
+    <div class="mb-3">
+      <label for="resources" class="form-label">Number of Resources:</label>
+      <input type="number" class="form-control" id="resources" min="1">
+    </div>
+    <button class="btn btn-primary mb-3" onclick="generateMatrices()">Generate Matrices</button>
+    <div id="matrices"></div>
+    <button class="btn btn-success mt-3" onclick="detectDeadlock()">Detect Deadlock</button>
+    <button class="btn btn-secondary mt-3" onclick="resetAll()">Reset</button>
+    <button class="btn btn-dark mt-3" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+    <div id="result" class="mt-4"></div>
+  </div>
+
+  <!-- Modal for Deadlock Resolution -->
+  <div class="modal fade" id="resolutionModal" tabindex="-1" aria-labelledby="resolutionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="resolutionModalLabel">Deadlock Resolution</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="resolutionContent">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    function generateMatrices() {
+      const p = document.getElementById('processes').value;
+      const r = document.getElementById('resources').value;
+      if (p <= 0 || r <= 0) {
+        alert('Please enter positive values.');
+        return;
+      }
+      let matricesHTML = `<h4>Allocation Matrix</h4><table class="table table-bordered"><tbody>`;
+      for (let i = 0; i < p; i++) {
+        matricesHTML += `<tr>`;
+        for (let j = 0; j < r; j++) {
+          matricesHTML += `<td><input type="number" class="matrix-input" id="alloc-${i}-${j}" min="0"></td>`;
+        }
+        matricesHTML += `</tr>`;
+      }
+      matricesHTML += `</tbody></table>`;
+
+      matricesHTML += `<h4>Request Matrix</h4><table class="table table-bordered"><tbody>`;
+      for (let i = 0; i < p; i++) {
+        matricesHTML += `<tr>`;
+        for (let j = 0; j < r; j++) {
+          matricesHTML += `<td><input type="number" class="matrix-input" id="req-${i}-${j}" min="0"></td>`;
+        }
+        matricesHTML += `</tr>`;
+      }
+      matricesHTML += `</tbody></table>`;
+
+      matricesHTML += `<h4>Available Resources</h4><div class="d-flex">`;
+      for (let j = 0; j < r; j++) {
+        matricesHTML += `<input type="number" class="matrix-input me-2" id="avail-${j}" min="0">`;
+      }
+      matricesHTML += `</div>`;
+
+      document.getElementById('matrices').innerHTML = matricesHTML;
+    }
+
+    function detectDeadlock() {
+      const p = document.getElementById('processes').value;
+      const r = document.getElementById('resources').value;
+      let alloc = [];
+      let req = [];
+      let avail = [];
+
+      for (let i = 0; i < p; i++) {
+        alloc[i] = [];
+        req[i] = [];
+        for (let j = 0; j < r; j++) {
+          alloc[i][j] = parseInt(document.getElementById(`alloc-${i}-${j}`).value) || 0;
+          req[i][j] = parseInt(document.getElementById(`req-${i}-${j}`).value) || 0;
+        }
+      }
+      for (let j = 0; j < r; j++) {
+        avail[j] = parseInt(document.getElementById(`avail-${j}`).value) || 0;
+      }
+
+      let finish = Array(p).fill(false);
+      let sequence = [];
+      console.log("Starting Deadlock Detection...");
+
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (let i = 0; i < p; i++) {
+          if (!finish[i]) {
+            let canProceed = true;
+            for (let j = 0; j < r; j++) {
+              if (req[i][j] > avail[j]) {
+                canProceed = false;
+                break;
+              }
+            }
+            if (canProceed) {
+              for (let j = 0; j < r; j++) {
+                avail[j] += alloc[i][j];
+              }
+              finish[i] = true;
+              sequence.push(`P${i}`);
+              changed = true;
+              console.log(`Process P${i} has completed.`);
+            }
+          }
+        }
+      }
+
+      let deadlockProcesses = [];
+      for (let i = 0; i < p; i++) {
+        if (!finish[i]) {
+          deadlockProcesses.push(`P${i}`);
+        }
+      }
+
+      const resultDiv = document.getElementById('result');
+      if (deadlockProcesses.length === 0) {
+        resultDiv.innerHTML = `<div class="alert alert-success">No Deadlock Detected!<br>Safe Sequence: ${sequence.join(' -> ')}</div>`;
+      } else {
+        resultDiv.innerHTML = `<div class="alert alert-danger">Deadlock Detected!<br>Processes involved: ${deadlockProcesses.join(', ')}</div>`;
+        showResolution(deadlockProcesses);
+      }
+
+      saveToStorage();
+    }
+
+    function resetAll() {
+      document.getElementById('processes').value = '';
+      document.getElementById('resources').value = '';
+      document.getElementById('matrices').innerHTML = '';
+      document.getElementById('result').innerHTML = '';
+      localStorage.clear();
+    }
+
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+    }
+
+    function saveToStorage() {
+      const processes = document.getElementById('processes').value;
+      const resources = document.getElementById('resources').value;
+      localStorage.setItem('processes', processes);
+      localStorage.setItem('resources', resources);
+    }
+
+    function loadFromStorage() {
+      const processes = localStorage.getItem('processes');
+      const resources = localStorage.getItem('resources');
+      if (processes && resources) {
+        document.getElementById('processes').value = processes;
+        document.getElementById('resources').value = resources;
+        generateMatrices();
+      }
+    }
+
+    function showResolution(deadlockProcesses) {
+      const content = `Suggestion: Preempt resources from one of the processes involved (${deadlockProcesses.join(', ')}) or terminate one to break the deadlock.`;
+      document.getElementById('resolutionContent').innerHTML = content;
+      new bootstrap.Modal(document.getElementById('resolutionModal')).show();
+    }
+  </script>
+</body>
+</html>
